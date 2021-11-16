@@ -1,0 +1,19 @@
+{
+  "name": "resize-all-images",
+  "version": "1.0.0",
+  "description": "Resize a lot of images",
+  "main": "index.js",
+  "keywords": ["resize", "images"],
+  "author": "R1ON",
+  "license": "ISC",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "file-type": "16.5.3",
+    "fs-extra": "10.0.0",
+    "gif-frames": "1.0.1",
+    "glob": "7.2.0",
+    "resize-img": "2.0.0"
+  }
+}
