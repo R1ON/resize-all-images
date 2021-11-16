@@ -18,6 +18,8 @@ const SUPPORTED_FORMATS = {
   gif: 'image/gif',
 };
 
+const DATE_TIME = createDateTime();
+
 const SIZE_ARGV = process.argv[2];
 let IMAGE_WIDTH = 24;
 let IMAGE_HEIGHT = 24;
@@ -65,7 +67,7 @@ glob(`${IMAGES_FOLDER}/**/*`, { nodir: true }, async (err, files) => {
       const type = await fileType.fromBuffer(file);
 
       if (!type) {
-        console.error('Тип файла не определен');
+        console.error(`Тип файла ${file} не определен = `, filePath);
         return null;
       }
 
@@ -133,10 +135,8 @@ async function resize(imagePath, file) {
     return null;
   }
 
-  const dateTime = createDateTime();
-
   try {
-    await fse.outputFile(path.join(__dirname, RESULT_FOLDER, dateTime, imagePath), image);
+    await fse.outputFile(path.join(__dirname, RESULT_FOLDER, DATE_TIME, imagePath), image);
   }
   catch (error) {
     console.error('Не получилось сохранить измененную картинку');

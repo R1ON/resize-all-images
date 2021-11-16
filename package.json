@@ -1,6 +1,6 @@
 {
   "name": "resize-all-images",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Resize a lot of images",
   "main": "index.js",
   "keywords": ["resize", "images"],
