@@ -1,7 +1,7 @@
 {
   "name": "resize-all-images",
-  "version": "1.1.0",
-  "description": "Resize a lot of images",
+  "version": "1.3.0",
+  "description": "Resize a lot of images and compare",
   "main": "index.js",
   "keywords": [
     "resize",
@@ -17,7 +17,7 @@
     "fs-extra": "10.0.0",
     "gif-frames": "1.0.1",
     "glob": "7.2.0",
-    "graceful-fs": "^4.2.8",
+    "graceful-fs": "4.2.8",
     "resize-img": "2.0.0"
   }
 }

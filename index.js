@@ -1,28 +1,20 @@
 const path = require('path');
 const fs = require('graceful-fs');
 const fse = require('fs-extra');
-const glob = require("glob")
-const resizeImg = require('resize-img')
+const glob = require('glob')
+
 const fileType = require('file-type');
 const gifFrames = require('gif-frames');
 
+const { correctImagesPath, resize, createDateTime } = require('./src/utils');
+const { IMAGES_FOLDER, RESULT_FOLDER, SUPPORTED_FORMATS } = require('./src/constants');
+
 // ---
 
-const IMAGES_FOLDER = 'images';
-const RESULT_FOLDER = 'result';
-
-const SUPPORTED_FORMATS = {
-  bmp: 'image/png',
-  jpg: 'image/jpeg',
-  png: 'image/bmp',
-  gif: 'image/gif',
-};
-
-const DATE_TIME = createDateTime();
+let imageWidth = 24;
+let imageHeight = 24;
 
 const SIZE_ARGV = process.argv[2];
-let IMAGE_WIDTH = 24;
-let IMAGE_HEIGHT = 24;
 
 if (!SIZE_ARGV) {
   console.warn('Ширина и высота для картинок не указана, будет применено значение по умолчанию = 24px');
@@ -34,10 +26,16 @@ else {
     console.warn('Не указан второй размер (ширина или высота), будет применено значение по умолчанию = 24px');
   }
   else {
-    IMAGE_WIDTH = parseInt(splittedSize[0]);
-    IMAGE_HEIGHT = parseInt(splittedSize[1]);
+    imageWidth = parseInt(splittedSize[0]);
+    imageHeight = parseInt(splittedSize[1]);
   }
 }
+
+const RESIZE_OPTIONS = {
+  width: imageWidth,
+  height: imageHeight,
+  dateTime: createDateTime(),
+};
 
 // ---
 
@@ -61,6 +59,7 @@ glob(`${IMAGES_FOLDER}/**/*`, { nodir: true }, async (err, files) => {
     fs.readFile(filePath, async (err, file) => {
       if (err) {
         console.error('Не удалось прочитать файл = ', filePath);
+        console.error(err);
         return null;
       }
 
@@ -68,6 +67,7 @@ glob(`${IMAGES_FOLDER}/**/*`, { nodir: true }, async (err, files) => {
 
       if (!type) {
         console.error(`Тип файла ${file} не определен = `, filePath);
+        console.error(err);
         return null;
       }
 
@@ -83,7 +83,16 @@ glob(`${IMAGES_FOLDER}/**/*`, { nodir: true }, async (err, files) => {
         const { dir, name } = path.parse(filePath);
 
         const fileName = `${name}.${outputType}`;
-        const tempPath = path.join(__dirname, dir, `temp-${fileName}`);
+        const tempPath = path.join(__dirname, 'temp', `temp-${fileName}`);
+
+        try {
+          await fse.ensureDir(path.join(__dirname, 'temp'));
+        }
+        catch (err) {
+          console.error(`Не удалось создать папку temp`);
+          console.error(err);
+          return null;
+        }
 
         const stream = fs.createWriteStream(tempPath);
 
@@ -95,15 +104,17 @@ glob(`${IMAGES_FOLDER}/**/*`, { nodir: true }, async (err, files) => {
           fs.readFile(tempPath, async (err, gifFrame) => {
             if (err) {
               console.error('Не удалось прочитать временную gif картинку = ', tempPath);
+              console.error(err);
               return null;
             }
 
             const gifFramePath = path.join(correctImagesPath(dir), fileName);
 
-            await resize(gifFramePath, gifFrame);
-            await fse.remove(tempPath, (err) => {
+            await resize(gifFramePath, gifFrame, RESIZE_OPTIONS);
+            await fse.remove(path.join(__dirname, 'temp'), (err) => {
               if (err) {
-                console.error('Не получилось удалить временную gif картинку');
+                console.error('Не получилось удалить temp папку');
+                console.error(err);
                 return null;
               }
             });
@@ -113,57 +124,7 @@ glob(`${IMAGES_FOLDER}/**/*`, { nodir: true }, async (err, files) => {
         return null;
       }
 
-      await resize(replacedPath, file);
+      await resize(replacedPath, file, RESIZE_OPTIONS);
     });
   });
 })
-
-async function resize(imagePath, file) {
-  let image;
-  try {
-    image = await resizeImg(file, {
-      width: IMAGE_WIDTH,
-      height: IMAGE_HEIGHT,
-    });
-  }
-  catch (error) {
-    console.error('Не получилось изменить размер картинки')
-    throw error;
-  }
-
-  if (!image) {
-    return null;
-  }
-
-  try {
-    await fse.outputFile(path.join(__dirname, RESULT_FOLDER, DATE_TIME, imagePath), image);
-  }
-  catch (error) {
-    console.error('Не получилось сохранить измененную картинку');
-    throw error;
-  }
-}
-
-function createDateTime() {
-  const today = new Date();
-
-  const year = today.getFullYear();
-  const month = correctDate(today.getMonth() + 1);
-  const day = correctDate(today.getDate());
-  const date = `${year}-${month}-${day}`;
-
-  const hours = correctDate(today.getHours());
-  const minutes = correctDate(today.getMinutes());
-  const seconds = correctDate(today.getSeconds());
-  const time = `${hours}-${minutes}-${seconds}`;
-
-  return `${date}__${time}`;
-}
-
-function correctDate(date) {
-  return ('00' + date).slice(-2);
-}
-
-function correctImagesPath(imagesPath) {
-  return imagesPath.replace(`${IMAGES_FOLDER}/`, '');
-}
