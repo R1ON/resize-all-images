@@ -13,11 +13,11 @@
     "start": "node index.js"
   },
   "dependencies": {
+    "cli-progress": "^3.9.1",
     "file-type": "16.5.3",
     "fs-extra": "10.0.0",
     "gif-frames": "1.0.1",
     "glob": "7.2.0",
-    "graceful-fs": "4.2.8",
     "resize-img": "2.0.0"
   }
 }

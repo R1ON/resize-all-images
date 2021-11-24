@@ -69,8 +69,22 @@ function correctImagesPath(imagesPath) {
   return imagesPath.replace(`${IMAGES_FOLDER}/`, '');
 }
 
+// ---
+
+function splitArrayToChunks(array, chunkSize) {
+  const tempArray = [];
+
+  for (let index = 0; index < array.length; index += chunkSize) {
+    const chunk = array.slice(index, index + chunkSize);
+    tempArray.push(chunk);
+  }
+
+  return tempArray;
+}
+
 module.exports = {
   correctImagesPath,
   resize,
   createDateTime,
+  splitArrayToChunks,
 };
