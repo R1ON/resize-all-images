@@ -1,27 +1,24 @@
 const path = require('path');
-const fs = require('fs');
 const fse = require('fs-extra');
 const glob = require('glob');
 
-const fileType = require('file-type');
-const gifFrames = require('gif-frames');
 const cliProgress = require('cli-progress');
+const { Worker } = require('worker_threads');
+const argv = require('minimist')(process.argv.slice(2));
 
-const { correctImagesPath, resize, createDateTime, splitArrayToChunks } = require('./src/utils');
-const { IMAGES_FOLDER, RESULT_FOLDER, SUPPORTED_FORMATS } = require('./src/constants');
+const { getFunctionBody, createDateTime, splitArrayToChunks } = require('./src/utils');
+const { IMAGES_FOLDER, RESULT_FOLDER } = require('./src/constants');
 
 // ---
 
 let imageWidth = 24;
 let imageHeight = 24;
 
-const SIZE_ARGV = process.argv[2];
-
-if (!SIZE_ARGV) {
+if (!argv.s) {
   console.warn('Ширина и высота для картинок не указана, будет применено значение по умолчанию = 24px');
 }
 else {
-  const splittedSize = SIZE_ARGV.split('.');
+  const splittedSize = argv.s.split('-');
 
   if (splittedSize.length !== 2) {
     console.warn('Не указан второй размер (ширина или высота), будет применено значение по умолчанию = 24px');
@@ -31,6 +28,8 @@ else {
     imageHeight = parseInt(splittedSize[1]);
   }
 }
+
+const NUMBER_OF_WORKERS = argv.w || 2;
 
 const RESIZE_OPTIONS = {
   width: imageWidth,
@@ -54,20 +53,71 @@ glob(`${IMAGES_FOLDER}/**/*`, { nodir: true }, async (err, files) => {
     return null;
   }
 
-  const bar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
-  bar.start(files.length, 0);
+  const chunks = splitArrayToChunks(files, NUMBER_OF_WORKERS);
 
-  const chunkItemsSize = 100;
-  const chunks = splitArrayToChunks(files, chunkItemsSize);
+  const multiBar = new cliProgress.MultiBar({
+    clearOnComplete: false,
+    hideCursor: true
+  }, cliProgress.Presets.shades_grey);
 
-  let chunkIndex = 0;
-  for (const chunkFiles of chunks) {
-    chunkIndex += chunkItemsSize;
-    bar.update(chunkIndex);
+  const promises = chunks.map((chunk) => {
+    const bar = multiBar.create(chunk.length, 0);
 
+    return new Promise((resolve, reject) => {
+      const worker = new Worker(getFunctionBody(renameCycle.toString()), {
+        eval: true,
+        workerData: {
+          chunks: chunk,
+          resizeOptions: RESIZE_OPTIONS,
+        },
+      });
+
+      worker.on('message', (value) => {
+        if (value.message === 'inc') {
+          bar.increment();
+        }
+      });
+
+      worker.on('error', reject);
+      worker.on('exit', (code) => {
+        if (code !== 0) {
+          reject(new Error(`Worker stopped with exit code ${code}`));
+        }
+
+        resolve();
+      });
+    })
+  });
+
+  await Promise.all(promises);
+
+  multiBar.stop();
+
+  await fse.remove(path.join(__dirname, 'temp'), (err) => {
+    if (err) {
+      console.error('Не получилось удалить temp папку');
+      console.error(err);
+      return null;
+    }
+  });
+});
+
+function renameCycle() {
+  const fs = require('fs');
+  const fse = require('fs-extra');
+  const path = require('path');
+  const gifFrames = require('gif-frames');
+  const fileType = require('file-type');
+  const { correctImagesPath, resize } = require('./src/utils');
+  const { SUPPORTED_FORMATS } = require('./src/constants');
+  const { workerData, parentPort } = require('worker_threads');
+
+  const { chunks, resizeOptions } = workerData;
+
+  (async function() {
     const promises = [];
 
-    chunkFiles.forEach((filePath) => {
+    chunks.forEach((filePath) => {
       promises.push(fs.promises.readFile(filePath).then((file) => ({
         file,
         filePath,
@@ -85,73 +135,63 @@ glob(`${IMAGES_FOLDER}/**/*`, { nodir: true }, async (err, files) => {
     }
 
     for (const { file, filePath } of filesData) {
-      const replacedPath = correctImagesPath(filePath);
+        parentPort.postMessage({ message: 'inc' });
+        const replacedPath = correctImagesPath(filePath);
 
-      const type = await fileType.fromBuffer(file);
+        const type = await fileType.fromBuffer(file);
 
-      if (!type) {
-        console.error(`Тип файла ${file} не определен = `, filePath);
-        console.error(err);
-        continue;
-      }
-
-      if (!Object.values(SUPPORTED_FORMATS).includes(type.mime)) {
-        console.error(`Формат файла ${type.mime} не поддерживается = `, filePath);
-        continue;
-      }
-
-      if (type.mime === SUPPORTED_FORMATS.gif) {
-        const outputType = 'png';
-
-        const frame = await gifFrames({ url: filePath, frames: 0, outputType });
-        const { dir, name } = path.parse(filePath);
-
-        const fileName = `${name}.${outputType}`;
-        const tempPath = path.join(__dirname, 'temp', `temp-${fileName}`);
-
-        try {
-          await fse.ensureDir(path.join(__dirname, 'temp'));
-        }
-        catch (err) {
-          console.error(`Не удалось создать папку temp`);
-          console.error(err);
+        if (!type) {
+          console.error(`Тип файла ${file} не определен = `, filePath);
           continue;
         }
 
-        const stream = fs.createWriteStream(tempPath);
+        if (!Object.values(SUPPORTED_FORMATS).includes(type.mime)) {
+          console.error(`Формат файла ${type.mime} не поддерживается = `, filePath);
+          continue;
+        }
 
-        frame[0]
-          .getImage()
-          .pipe(stream);
+        if (type.mime === SUPPORTED_FORMATS.gif) {
+          const outputType = 'png';
 
-        stream.on('close', () => {
-          fs.readFile(tempPath, async (err, gifFrame) => {
-            if (err) {
-              console.error('Не удалось прочитать временную gif картинку = ', tempPath);
-              console.error(err);
-              return null;
-            }
+          const frame = await gifFrames({ url: filePath, frames: 0, outputType });
+          const { dir, name } = path.parse(filePath);
 
-            const gifFramePath = path.join(correctImagesPath(dir), fileName);
+          const fileName = `${name}.${outputType}`;
+          const tempPath = path.join(__dirname, 'temp', `temp-${fileName}`);
 
-            await resize(gifFramePath, gifFrame, RESIZE_OPTIONS);
+          try {
+            await fse.ensureDir(path.join(__dirname, 'temp'));
+          }
+          catch (err) {
+            console.error(`Не удалось создать папку temp`);
+            console.error(err);
+            continue;
+          }
+
+          const stream = fs.createWriteStream(tempPath);
+
+          frame[0]
+            .getImage()
+            .pipe(stream);
+
+          stream.on('close', () => {
+            fs.readFile(tempPath, async (err, gifFrame) => {
+              if (err) {
+                console.error('Не удалось прочитать временную gif картинку = ', tempPath);
+                console.error(err);
+                return null;
+              }
+
+              const gifFramePath = path.join(correctImagesPath(dir), fileName);
+
+              await resize(gifFramePath, gifFrame, resizeOptions);
+            });
           });
-        });
 
-        continue;
+          continue;
+        }
+
+        await resize(replacedPath, file, resizeOptions);
       }
-
-      await resize(replacedPath, file, RESIZE_OPTIONS);
-    }
-  }
-
-  await fse.remove(path.join(__dirname, 'temp'), (err) => {
-    if (err) {
-      console.error('Не получилось удалить temp папку');
-      console.error(err);
-      return null;
-    }
-  });
-  
-  bar.stop();
-})
+  })();
+}

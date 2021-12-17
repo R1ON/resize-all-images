@@ -72,17 +72,33 @@ function correctImagesPath(imagesPath) {
 // ---
 
 function splitArrayToChunks(array, chunkSize) {
-  const tempArray = [];
+  const chunkLength = Math.max(array.length / chunkSize, 1);
+  const chunks = [];
 
-  for (let index = 0; index < array.length; index += chunkSize) {
-    const chunk = array.slice(index, index + chunkSize);
-    tempArray.push(chunk);
+  for (let i = 0; i < chunkSize; i++) {
+    const chunkPosition = chunkLength * (i + 1);
+
+    if (chunkPosition <= array.length) {
+      chunks.push(array.slice(chunkLength * i, chunkPosition));
+    }
   }
 
-  return tempArray;
+  return chunks;
+}
+
+function getFunctionBody(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  return value.substring(
+    value.indexOf('{') + 1,
+    value.lastIndexOf('}')
+  );
 }
 
 module.exports = {
+  getFunctionBody,
   correctImagesPath,
   resize,
   createDateTime,
