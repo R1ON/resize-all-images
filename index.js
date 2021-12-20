@@ -13,7 +13,12 @@ const { IMAGES_FOLDER, RESULT_FOLDER } = require('./src/constants');
 
 let imageWidth = 24;
 let imageHeight = 24;
+let compression = {
+  png: [0.3, 0.3],
+  jpg: 'medium',
+};
 
+// TODO: Вынести в утилы
 if (!argv.s) {
   console.warn('Ширина и высота для картинок не указана, будет применено значение по умолчанию = 24px');
 }
@@ -29,12 +34,45 @@ else {
   }
 }
 
+if (!argv.c) {
+  compression = null;
+}
+else {
+  const props = argv.c.split('-');
+  props.forEach((prop) => {
+    const keyValue = prop.split(':');
+    
+    if (keyValue.length !== 2) {
+      console.warn('Неправильно указано значения для параметра ', props);
+      console.log('Значение должно быть указано так: "ключ:значени" - без пробелов внутри');
+      return null;
+    }
+    
+    const [key, value] = keyValue;
+
+    switch (key) {
+      case 'png':
+        const parsedValue = parseFloat(value);
+        compression.png = [parsedValue, parsedValue];
+        break;
+
+      case 'jpg':
+        compression.jpg = value;
+        break;
+
+      default:
+        console.warn(`Ключ "${key}" не найден, допустимые значения: jpg, png`);
+    }
+  });
+}
+
 const NUMBER_OF_WORKERS = argv.w || 2;
 
 const RESIZE_OPTIONS = {
   width: imageWidth,
   height: imageHeight,
   dateTime: createDateTime(),
+  compression,
 };
 
 // ---
@@ -135,63 +173,63 @@ function renameCycle() {
     }
 
     for (const { file, filePath } of filesData) {
-        parentPort.postMessage({ message: 'inc' });
-        const replacedPath = correctImagesPath(filePath);
+      parentPort.postMessage({ message: 'inc' });
+      const replacedPath = correctImagesPath(filePath);
 
-        const type = await fileType.fromBuffer(file);
+      const type = await fileType.fromBuffer(file);
 
-        if (!type) {
-          console.error(`Тип файла ${file} не определен = `, filePath);
-          continue;
-        }
-
-        if (!Object.values(SUPPORTED_FORMATS).includes(type.mime)) {
-          console.error(`Формат файла ${type.mime} не поддерживается = `, filePath);
-          continue;
-        }
-
-        if (type.mime === SUPPORTED_FORMATS.gif) {
-          const outputType = 'png';
-
-          const frame = await gifFrames({ url: filePath, frames: 0, outputType });
-          const { dir, name } = path.parse(filePath);
-
-          const fileName = `${name}.${outputType}`;
-          const tempPath = path.join(__dirname, 'temp', `temp-${fileName}`);
-
-          try {
-            await fse.ensureDir(path.join(__dirname, 'temp'));
-          }
-          catch (err) {
-            console.error(`Не удалось создать папку temp`);
-            console.error(err);
-            continue;
-          }
-
-          const stream = fs.createWriteStream(tempPath);
-
-          frame[0]
-            .getImage()
-            .pipe(stream);
-
-          stream.on('close', () => {
-            fs.readFile(tempPath, async (err, gifFrame) => {
-              if (err) {
-                console.error('Не удалось прочитать временную gif картинку = ', tempPath);
-                console.error(err);
-                return null;
-              }
-
-              const gifFramePath = path.join(correctImagesPath(dir), fileName);
-
-              await resize(gifFramePath, gifFrame, resizeOptions);
-            });
-          });
-
-          continue;
-        }
-
-        await resize(replacedPath, file, resizeOptions);
+      if (!type) {
+        console.error(`Тип файла ${file} не определен = `, filePath);
+        continue;
       }
+
+      if (!Object.values(SUPPORTED_FORMATS).includes(type.mime)) {
+        console.error(`Формат файла ${type.mime} не поддерживается = `, filePath);
+        continue;
+      }
+
+      if (type.mime === SUPPORTED_FORMATS.gif) {
+        const outputType = 'png';
+
+        const frame = await gifFrames({ url: filePath, frames: 0, outputType });
+        const { dir, name } = path.parse(filePath);
+
+        const fileName = `${name}.${outputType}`;
+        const tempPath = path.join(__dirname, 'temp', `temp-${fileName}`);
+
+        try {
+          await fse.ensureDir(path.join(__dirname, 'temp'));
+        }
+        catch (err) {
+          console.error(`Не удалось создать папку temp`);
+          console.error(err);
+          continue;
+        }
+
+        const stream = fs.createWriteStream(tempPath);
+
+        frame[0]
+          .getImage()
+          .pipe(stream);
+
+        stream.on('close', () => {
+          fs.readFile(tempPath, async (err, gifFrame) => {
+            if (err) {
+              console.error('Не удалось прочитать временную gif картинку = ', tempPath);
+              console.error(err);
+              return null;
+            }
+
+            const gifFramePath = path.join(correctImagesPath(dir), fileName);
+
+            await resize(gifFramePath, gifFrame, resizeOptions);
+          });
+        });
+
+        continue;
+      }
+
+      await resize(replacedPath, file, resizeOptions);
+    }
   })();
 }

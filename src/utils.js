@@ -1,7 +1,9 @@
 const path = require('path');
 const fse = require('fs-extra');
-const resizeImg = require('resize-img')
-
+const resizeImg = require('resize-img');
+const imagemin = require('imagemin');
+const imageminJpeg = require('imagemin-jpeg-recompress');
+const imageminPngquant = require('imagemin-pngquant');
 
 const { RESULT_FOLDER, IMAGES_FOLDER } = require('./constants');
 
@@ -10,7 +12,8 @@ const { RESULT_FOLDER, IMAGES_FOLDER } = require('./constants');
 async function resize(imagePath, file, {
   dateTime,
   width,
-  height
+  height,
+  compression,
 }) {
   let image;
   try {
@@ -27,6 +30,23 @@ async function resize(imagePath, file, {
 
   if (!image) {
     return null;
+  }
+
+  const output = path.join(__dirname, '..', RESULT_FOLDER, dateTime, imagePath);
+
+  if (compression !== null) {
+    image = await imagemin.buffer(image, {
+      plugins: [
+        imageminJpeg({
+          quality: compression.jpg,
+        }),
+        imageminPngquant({
+          quality: compression.png,
+          speed: 1,
+          strip: true,
+        }),
+      ],
+    });
   }
 
   try {

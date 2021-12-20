@@ -5,7 +5,8 @@
   "main": "index.js",
   "keywords": [
     "resize",
-    "images"
+    "images",
+    "compress"
   ],
   "author": "R1ON",
   "license": "ISC",
@@ -13,12 +14,15 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "cli-progress": "^3.9.1",
+    "cli-progress": "3.9.1",
     "file-type": "16.5.3",
     "fs-extra": "10.0.0",
     "gif-frames": "1.0.1",
     "glob": "7.2.0",
-    "minimist": "^1.2.5",
+    "imagemin": "7.0.1",
+    "imagemin-jpeg-recompress": "7.0.0",
+    "imagemin-pngquant": "9.0.2",
+    "minimist": "1.2.5",
     "resize-img": "2.0.0"
   }
 }
